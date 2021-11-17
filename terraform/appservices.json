@@ -1,0 +1,19 @@
+{
+    "appservices": [
+        {
+            "id": "one",
+            "name": "apps-dummy-one",
+            "probe": "/api/v1/one"
+        },
+        {
+            "id": "two",
+            "name": "apps-dummy-two",
+            "probe": "/api/v1/two"
+        },
+        {
+            "id": "three",
+            "name": "apps-dummy-three",
+            "probe": "/api/v1/three"
+        }
+    ]
+}

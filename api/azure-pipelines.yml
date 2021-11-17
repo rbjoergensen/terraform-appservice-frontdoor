@@ -1,0 +1,183 @@
+trigger:
+- master 
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+resources:
+- repo: self
+
+variables:
+- name: 'major'
+  value: 1
+- name: 'minor'
+  value: 0
+- name: 'majorMinor'
+  value: ${{variables.major}}.${{variables.minor}}
+- ${{ if or(eq(variables['Build.SourceBranchName'], 'master'), eq(variables['Build.SourceBranchName'], 'main'))}}:
+  - name: 'patch'
+    value: $[counter(variables.majorMinor, 0)]
+  - name: 'branchTag'
+    value:
+- ${{ if not(or(eq(variables['Build.SourceBranchName'], 'master'), eq(variables['Build.SourceBranchName'], 'main')))}}:
+  - name: 'patch'
+    value: 0
+  - name: 'branchPatch'
+    value: $[counter(variables['Build.SourceBranchName'], 0)]
+  - name: 'branchTag'
+    value: -${{variables['build.sourcebranchname']}}.$(branchPatch)
+- name: 'semver'
+  value: '$(majorMinor).$(patch)$(branchTag)'
+
+stages:
+- stage: 'build'
+  displayName: "Build"
+  dependsOn:
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - job: "settings"
+    displayName: "Set build number"
+    steps:
+      - pwsh: |
+          Write-Host "##vso[build.updatebuildnumber]$(semver)"
+
+  - job: "build"
+    dependsOn: "settings"
+    displayName: "Build & Publish"
+    steps:
+    - task: DotNetCoreCLI@2
+      displayName: 'Build and Publish'
+      inputs:
+        command: publish
+        publishWebProjects: false
+        projects: 'dummy-api/dummy-api.csproj'
+        arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)/app'
+        zipAfterPublish: false
+        modifyOutputPath: false
+
+    - task: ArchiveFiles@2
+      displayName: 'Package'
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/app'
+        includeRootFolder: false
+        archiveFile: '$(Build.ArtifactStagingDirectory)/zip/app.zip'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact: drop'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/zip'
+
+- stage: 'deploy_one'
+  displayName: "Deploy Dummy One"
+  dependsOn: 'build'
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - job: "deploy_one"
+    displayName: 'Deploy Dummy One'
+    steps:
+      - download: current
+        artifact: drop
+        patterns: '**/*.zip'
+
+      - task: AzureAppServiceSettings@1
+        inputs:
+          azureSubscription: 'dev'
+          appName: 'apps-dummy-one'
+          resourceGroupName: 'appservices'
+          appSettings: |
+            [
+               {
+                "name": "Dummy",
+                "value": "dummy-one-$(Build.BuildNumber)",
+                "slotSetting": true
+               }
+            ]
+
+      - task: AzureRmWebAppDeployment@4
+        inputs:
+          ConnectionType: 'AzureRM'
+          azureSubscription: 'dev'
+          appType: 'webApp'
+          WebAppName: 'apps-dummy-one'
+          deployToSlotOrASE: true
+          ResourceGroupName: 'appservices'
+          SlotName: 'production'
+          packageForLinux: '$(Pipeline.Workspace)/drop/app.zip'
+
+- stage: 'deploy_two'
+  displayName: "Deploy Dummy Two"
+  dependsOn: 'build'
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - job: "deploy_two"
+    displayName: 'Deploy Dummy Two'
+    steps:
+      - download: current
+        artifact: drop
+        patterns: '**/*.zip'
+
+      - task: AzureAppServiceSettings@1
+        inputs:
+          azureSubscription: 'dev'
+          appName: 'apps-dummy-two'
+          resourceGroupName: 'appservices'
+          appSettings: |
+            [
+               {
+                "name": "Dummy",
+                "value": "dummy-two-$(Build.BuildNumber)",
+                "slotSetting": true
+               }
+            ]
+
+      - task: AzureRmWebAppDeployment@4
+        inputs:
+          ConnectionType: 'AzureRM'
+          azureSubscription: 'dev'
+          appType: 'webApp'
+          WebAppName: 'apps-dummy-two'
+          deployToSlotOrASE: true
+          ResourceGroupName: 'appservices'
+          SlotName: 'production'
+          packageForLinux: '$(Pipeline.Workspace)/drop/app.zip'
+
+- stage: 'deploy_three'
+  displayName: "Deploy Dummy Three"
+  dependsOn: 'build'
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - job: "deploy_three"
+    displayName: 'Deploy Dummy Three'
+    steps:
+      - download: current
+        artifact: drop
+        patterns: '**/*.zip'
+
+      - task: AzureAppServiceSettings@1
+        inputs:
+          azureSubscription: 'dev'
+          appName: 'apps-dummy-three'
+          resourceGroupName: 'appservices'
+          appSettings: |
+            [
+               {
+                "name": "Dummy",
+                "value": "dummy-three-$(Build.BuildNumber)",
+                "slotSetting": true
+               }
+            ]
+
+      - task: AzureRmWebAppDeployment@4
+        inputs:
+          ConnectionType: 'AzureRM'
+          azureSubscription: 'dev'
+          appType: 'webApp'
+          WebAppName: 'apps-dummy-three'
+          deployToSlotOrASE: true
+          ResourceGroupName: 'appservices'
+          SlotName: 'production'
+          packageForLinux: '$(Pipeline.Workspace)/drop/app.zip'
